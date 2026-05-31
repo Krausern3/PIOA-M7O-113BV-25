@@ -1,25 +1,20 @@
 from __future__ import annotations
 
-from .backend.memory import (
-    create_bs,
-    create_rcd,
-    delete_bs,
-    delete_rcd,
-    get_tmp,
-    return_bs,
-    select_rcd,
-    sort_rcd,
-    update_rcd,
-)
+from .backend.database import DatabaseManager
+from .backend.file_csv import CsvDatabaseManager
+from .backend.file_json import JsonDatabaseManager
+from .backend.memory import MemoryDatabaseManager
 
 
 class DatabaseCLI:
     def __init__(self) -> None:
+        self.database = self._choose_database()
         self._table_actions = {
             "1": self._add_record,
             "2": self._show_all_records,
             "3": self._find_records,
             "4": self._sort_records,
+            "5": self._configure_indexes,
         }
 
     def run(self) -> None:
@@ -37,31 +32,48 @@ class DatabaseCLI:
             else:
                 print("Неизвестная команда. Повторите ввод.")
 
+    def _choose_database(self) -> DatabaseManager:
+        print("Выберите тип базы данных:")
+        print("1. In-memory")
+        print("2. Файловая база (JSON)")
+        print("3. Файловая база (CSV)")
+
+        choice = input("Введите номер: ").strip()
+        if choice == "2":
+            return JsonDatabaseManager("data/json")
+        if choice == "3":
+            return CsvDatabaseManager("data/csv")
+        return MemoryDatabaseManager()
+
     def _create_base(self) -> None:
-        name = input("Введите название для базы: ").strip()
-        columns_input = input("Введите имена колонок через запятую: ").strip()
+        name = input("Введите имя таблицы: ").strip()
+        columns_input = input("Введите имена столбцов через запятую: ").strip()
         columns = [column.strip() for column in columns_input.split(",")]
+        indexed_fields = self._read_indexed_fields(columns)
         try:
-            create_bs(name, columns)
+            table = self.database.create_base(name, columns, indexed_fields=indexed_fields)
         except ValueError as exc:
             print(f"Ошибка: {exc}")
             return
-        print(f"База '{name}' создана с колонками: {get_tmp(len(return_bs()) - 1)}")
+        print(
+            f"Таблица '{table.name}' создана со столбцами {table.columns} "
+            f"и индексами {table.indexed_fields}."
+        )
 
     def _open_base(self) -> None:
-        bases = return_bs()
+        bases = self.database.return_bases()
         self._show_bases(bases)
         if not bases:
             return
 
-        base_index = self._read_int("Выберите базу (-1 для выхода): ", allow_empty=False, min_value=-1)
+        base_index = self._read_int("Выберите таблицу (-1 для выхода): ", allow_empty=False, min_value=-1)
         if base_index == -1:
             return
         if base_index >= len(bases):
-            print("Ошибка: базы с таким номером нет.")
+            print("Ошибка: таблицы с таким номером нет.")
             return
 
-        columns = get_tmp(base_index)
+        columns = self.database.get_tmp(base_index)
         while True:
             self._print_table_menu()
             action = input("Выберите действие: ").strip()
@@ -75,30 +87,30 @@ class DatabaseCLI:
             handler(base_index, columns)
 
     def _delete_base(self) -> None:
-        bases = return_bs()
+        bases = self.database.return_bases()
         self._show_bases(bases)
         if not bases:
-            print("Баз для удаления нет.")
+            print("Нет таблиц для удаления.")
             return
 
-        base_index = self._read_int("Введите номер базы для удаления: ", allow_empty=False, min_value=0)
+        base_index = self._read_int("Введите номер таблицы для удаления: ", allow_empty=False, min_value=0)
         if base_index >= len(bases):
-            print("Ошибка: базы с таким номером нет.")
+            print("Ошибка: таблицы с таким номером нет.")
             return
-        delete_bs(base_index)
-        print("База удалена.")
+        self.database.delete_base(base_index)
+        print("Таблица удалена.")
 
     def _add_record(self, base_index: int, columns: list[str]) -> None:
         values = [input(f"{column}: ").strip() for column in columns]
         try:
-            record = create_rcd(base_index, values)
+            record = self.database.create_record(base_index, values)
         except ValueError as exc:
             print(f"Ошибка: {exc}")
             return
         print(f"Запись добавлена: {record}")
 
     def _show_all_records(self, base_index: int, _: list[str]) -> None:
-        self._print_records(select_rcd(base_index))
+        self._print_records(self.database.select_records(base_index))
 
     def _find_records(self, base_index: int, columns: list[str]) -> None:
         filters = []
@@ -107,7 +119,7 @@ class DatabaseCLI:
             value = input(f"{column}: ").strip()
             filters.append(value or None)
 
-        records = select_rcd(base_index, filters)
+        records = self.database.select_records(base_index, filters)
         self._print_records(records, numbered=True)
         if not records:
             return
@@ -119,16 +131,26 @@ class DatabaseCLI:
             self._delete_record(base_index, records)
 
     def _sort_records(self, base_index: int, columns: list[str]) -> None:
-        print(f"Поля сортировки: {', '.join(columns)}")
+        print(f"Поля для сортировки: {', '.join(columns)}")
         field = input("Введите имя поля или его индекс: ").strip()
         reverse = input("Порядок (asc/desc): ").strip().lower() == "desc"
         try:
             field_value: int | str = int(field) if field.isdigit() else field
-            records = sort_rcd(base_index, field_value, reverse=reverse)
+            records = self.database.sort_records(base_index, field_value, reverse=reverse)
         except ValueError as exc:
             print(f"Ошибка: {exc}")
             return
         self._print_records(records)
+
+    def _configure_indexes(self, base_index: int, columns: list[str]) -> None:
+        print(f"Доступные поля: {', '.join(columns)}")
+        indexed_fields = self._read_indexed_fields(columns)
+        try:
+            fields = self.database.create_index(base_index, indexed_fields or columns)
+        except ValueError as exc:
+            print(f"Ошибка: {exc}")
+            return
+        print(f"Индексы обновлены: {fields}")
 
     def _update_record(self, base_index: int, records: list[tuple], columns: list[str]) -> None:
         record_index = self._choose_record(records)
@@ -138,26 +160,36 @@ class DatabaseCLI:
         current_record = records[record_index]
         new_values = []
         for index, column in enumerate(columns):
-            value = input(f"{column} (текущее: {current_record[index]}): ").strip()
+            value = input(f"{column} (текущее значение: {current_record[index]}): ").strip()
             new_values.append(value or None)
 
         if all(value is None for value in new_values):
             print("Нет изменений для сохранения.")
             return
 
-        all_records = select_rcd(base_index)
+        all_records = self.database.select_records(base_index)
         actual_index = all_records.index(current_record)
-        update_rcd(base_index, actual_index, new_values)
-        print("Данные успешно изменены.")
+        self.database.update_record(base_index, actual_index, new_values)
+        print("Запись обновлена.")
 
     def _delete_record(self, base_index: int, records: list[tuple]) -> None:
         record_index = self._choose_record(records)
         if record_index is None:
             return
-        if delete_rcd(base_index, records, record_index):
+        if self.database.delete_record(base_index, records, record_index):
             print("Запись удалена.")
             return
         print("Ошибка: не удалось удалить запись.")
+
+    @staticmethod
+    def _read_indexed_fields(columns: list[str]) -> list[str]:
+        raw = input(
+            "Введите поля для индексации через запятую "
+            "(Enter = индексировать все столбцы): "
+        ).strip()
+        if not raw:
+            return columns.copy()
+        return [field.strip() for field in raw.split(",") if field.strip()]
 
     @staticmethod
     def _choose_record(records: list[tuple]) -> int | None:
@@ -203,15 +235,15 @@ class DatabaseCLI:
     @staticmethod
     def _show_bases(bases: list[list]) -> None:
         if not bases:
-            print("Нет доступных баз.")
+            print("Нет доступных таблиц.")
             return
         for index, base in enumerate(bases):
-            print(f"{index}. {base[0]} (колонки: {base[1]})")
+            print(f"{index}. {base[0]} (столбцы: {base[1]})")
 
     @staticmethod
     def _print_base_menu() -> None:
         print("\n<> Система управления базами <>")
-        print("1. Создать новую таблицу")
+        print("1. Создать таблицу")
         print("2. Открыть таблицу")
         print("3. Удалить таблицу")
         print("0. Выход")
@@ -221,8 +253,9 @@ class DatabaseCLI:
         print("\n=== Таблица ===")
         print("1. Добавить запись")
         print("2. Показать все записи")
-        print("3. Найти записи по фильтру")
-        print("4. Сортировать записи")
+        print("3. Найти записи")
+        print("4. Отсортировать записи")
+        print("5. Настроить индексы")
         print("0. Назад")
 
 
