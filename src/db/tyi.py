@@ -1,275 +1,230 @@
+from __future__ import annotations
+
 from .backend.memory import (
-    create_rcd,
-    select_rcd,
-    update_rcd,
-    delete_rcd,
     create_bs,
+    create_rcd,
     delete_bs,
-    return_bs,
+    delete_rcd,
     get_tmp,
+    return_bs,
+    select_rcd,
+    sort_rcd,
+    update_rcd,
 )
 
 
-def read_values_by_temp(temp: list[str]) -> list:
-    values = []
-    print("\nВведите значения для полей:")
-    for i in range(len(temp)):
-        value = input(f"{temp[i]}: ").strip()
-        values.append(value)
-    return values
+class DatabaseCLI:
+    def __init__(self) -> None:
+        self._table_actions = {
+            "1": self._add_record,
+            "2": self._show_all_records,
+            "3": self._find_records,
+            "4": self._sort_records,
+        }
 
+    def run(self) -> None:
+        while True:
+            self._print_base_menu()
+            action = input("Выберите действие: ").strip()
+            if action == "1":
+                self._create_base()
+            elif action == "2":
+                self._open_base()
+            elif action == "3":
+                self._delete_base()
+            elif action == "0":
+                return
+            else:
+                print("Неизвестная команда. Повторите ввод.")
 
-def read_filters_by_temp(temp: list[str]) -> list:
-    print("\nВведите фильтры (Enter = пропустить поле):")
-    filters = [None] * len(temp)
-    for i in range(len(temp)):
-        value = input(f"{temp[i]}: ").strip()
-        filters[i] = value if value != "" else None
-    return filters
-
-
-def print_menu_for_many_bases() -> None:
-    print("\n <> Система управления базами <>")
-    print("1. Создать новую таблицу")
-    print("2. Показать все таблицы")
-    print("3. Удалить таблицу")
-    print("0. Выход")
-
-
-def _print_menu() -> None:
-    print("\n=== База студентов ===")
-    print("1. Добавить запись")
-    print("2. Показать все записи")
-    print("3. Найти записи по фильтру")
-    print("0. Выход")
-
-
-def _print_submenu() -> None:
-    print("\n1. Обновить запись")
-    print("2. Удалить запись")
-    print("0. Выход")
-
-
-def read_int(prompt: str) -> int:
-    while True:
-        raw = input(prompt).strip()
+    def _create_base(self) -> None:
+        name = input("Введите название для базы: ").strip()
+        columns_input = input("Введите имена колонок через запятую: ").strip()
+        columns = [column.strip() for column in columns_input.split(",")]
         try:
-            return int(raw)
-        except ValueError:
-            print("Ошибка: введите целое число.")
+            create_bs(name, columns)
+        except ValueError as exc:
+            print(f"Ошибка: {exc}")
+            return
+        print(f"База '{name}' создана с колонками: {get_tmp(len(return_bs()) - 1)}")
 
+    def _open_base(self) -> None:
+        bases = return_bs()
+        self._show_bases(bases)
+        if not bases:
+            return
 
-def add_student(number_of_base, temp) -> None:
-    print("\nДобавление записи")
+        base_index = self._read_int("Выберите базу (-1 для выхода): ", allow_empty=False, min_value=-1)
+        if base_index == -1:
+            return
+        if base_index >= len(bases):
+            print("Ошибка: базы с таким номером нет.")
+            return
 
-    values = read_values_by_temp(temp)
+        columns = get_tmp(base_index)
+        while True:
+            self._print_table_menu()
+            action = input("Выберите действие: ").strip()
+            if action == "0":
+                return
 
-    try:
-        record = create_rcd(number_of_base, values)
+            handler = self._table_actions.get(action)
+            if handler is None:
+                print("Неизвестная команда. Повторите ввод.")
+                continue
+            handler(base_index, columns)
 
+    def _delete_base(self) -> None:
+        bases = return_bs()
+        self._show_bases(bases)
+        if not bases:
+            print("Баз для удаления нет.")
+            return
+
+        base_index = self._read_int("Введите номер базы для удаления: ", allow_empty=False, min_value=0)
+        if base_index >= len(bases):
+            print("Ошибка: базы с таким номером нет.")
+            return
+        delete_bs(base_index)
+        print("База удалена.")
+
+    def _add_record(self, base_index: int, columns: list[str]) -> None:
+        values = [input(f"{column}: ").strip() for column in columns]
+        try:
+            record = create_rcd(base_index, values)
+        except ValueError as exc:
+            print(f"Ошибка: {exc}")
+            return
         print(f"Запись добавлена: {record}")
 
-    except ValueError as exc:
-        print(f"Ошибка: {exc}")
+    def _show_all_records(self, base_index: int, _: list[str]) -> None:
+        self._print_records(select_rcd(base_index))
 
+    def _find_records(self, base_index: int, columns: list[str]) -> None:
+        filters = []
+        print("Введите фильтры (Enter = пропустить поле):")
+        for column in columns:
+            value = input(f"{column}: ").strip()
+            filters.append(value or None)
 
-def print_records(records: list[tuple], flag=True, temp=None) -> None:
-    if not records:
-        print("Записи не найдены.")
-        return
+        records = select_rcd(base_index, filters)
+        self._print_records(records, numbered=True)
+        if not records:
+            return
 
-    if flag:
-        for record in records:
-            print(record)
-    else:
-        print("\nСписок подходящих записей")
-        for i in range(len(records)):
-            print(str(i) + ".", records[i])
+        action = input("1. Обновить 2. Удалить 0. Назад: ").strip()
+        if action == "1":
+            self._update_record(base_index, records, columns)
+        elif action == "2":
+            self._delete_record(base_index, records)
 
-
-def show_all_students(number_of_base) -> None:
-    print("\nСписок записей")
-    print_records(select_rcd(number_of_base))
-
-
-def show_all_bases() -> None:
-    print("\nСписок баз")
-    Bases = return_bs()
-    if not Bases:
-        print("Записи не найдены.")
-        return
-    for i in range(len(Bases)):
-        print(str(i) + ".", Bases[i][0], f"(колонки: {Bases[i][1]})")
-
-
-def read_optional_int(prompt: str) -> int | None:
-    while True:
-        raw = input(prompt).strip()
-
-        if raw == "":
-            return None
-
+    def _sort_records(self, base_index: int, columns: list[str]) -> None:
+        print(f"Поля сортировки: {', '.join(columns)}")
+        field = input("Введите имя поля или его индекс: ").strip()
+        reverse = input("Порядок (asc/desc): ").strip().lower() == "desc"
         try:
-            return int(raw)
-        except ValueError:
-            print("Ошибка: введите целое число или оставьте поле пустым.")
+            field_value: int | str = int(field) if field.isdigit() else field
+            records = sort_rcd(base_index, field_value, reverse=reverse)
+        except ValueError as exc:
+            print(f"Ошибка: {exc}")
+            return
+        self._print_records(records)
 
+    def _update_record(self, base_index: int, records: list[tuple], columns: list[str]) -> None:
+        record_index = self._choose_record(records)
+        if record_index is None:
+            return
 
-def find_students_by_filter(number_of_base, temp) -> list:
-    print("\nПоиск по фильтру")
+        current_record = records[record_index]
+        new_values = []
+        for index, column in enumerate(columns):
+            value = input(f"{column} (текущее: {current_record[index]}): ").strip()
+            new_values.append(value or None)
 
-    filters = read_filters_by_temp(temp)
+        if all(value is None for value in new_values):
+            print("Нет изменений для сохранения.")
+            return
 
-    records = select_rcd(number_of_base, filters=filters)
+        all_records = select_rcd(base_index)
+        actual_index = all_records.index(current_record)
+        update_rcd(base_index, actual_index, new_values)
+        print("Данные успешно изменены.")
 
-    print_records(records, False)
-    return records
+    def _delete_record(self, base_index: int, records: list[tuple]) -> None:
+        record_index = self._choose_record(records)
+        if record_index is None:
+            return
+        if delete_rcd(base_index, records, record_index):
+            print("Запись удалена.")
+            return
+        print("Ошибка: не удалось удалить запись.")
 
+    @staticmethod
+    def _choose_record(records: list[tuple]) -> int | None:
+        if len(records) == 1:
+            return 0
 
-def update_student(number_of_base, records, n=0, temp=None) -> None:
-    print("\nОбновление информации (Enter = пропустить поле)")
+        choice = input("Выберите номер записи: ").strip()
+        if not choice.isdigit():
+            print("Ошибка: введите целое число.")
+            return None
+        index = int(choice)
+        if not 0 <= index < len(records):
+            print("Ошибка: записи с таким номером нет.")
+            return None
+        return index
 
-    if n >= len(records):
-        print("Ошибка: выбранного студента нет в списке")
-        return
+    @staticmethod
+    def _read_int(prompt: str, allow_empty: bool, min_value: int) -> int | None:
+        while True:
+            raw = input(prompt).strip()
+            if allow_empty and raw == "":
+                return None
+            try:
+                value = int(raw)
+            except ValueError:
+                print("Ошибка: введите целое число.")
+                continue
+            if value < min_value:
+                print("Ошибка: число меньше допустимого.")
+                continue
+            return value
 
-    old_record = records[n]
-    new_values = [None] * len(temp)
+    @staticmethod
+    def _print_records(records: list[tuple], numbered: bool = False) -> None:
+        if not records:
+            print("Записи не найдены.")
+            return
 
-    print(f"Текущая запись: {old_record}")
-    print("Введите новые значения (Enter = оставить без изменений):")
+        for index, record in enumerate(records):
+            prefix = f"{index}. " if numbered else ""
+            print(f"{prefix}{record}")
 
-    for i in range(len(temp)):
-        value = input(f"{temp[i]} (текущее: {old_record[i]}): ").strip()
-        new_values[i] = value if value != "" else None
+    @staticmethod
+    def _show_bases(bases: list[list]) -> None:
+        if not bases:
+            print("Нет доступных баз.")
+            return
+        for index, base in enumerate(bases):
+            print(f"{index}. {base[0]} (колонки: {base[1]})")
 
-    if all(v is None for v in new_values):
-        print("Нет изменений для сохранения.")
-        return
+    @staticmethod
+    def _print_base_menu() -> None:
+        print("\n<> Система управления базами <>")
+        print("1. Создать новую таблицу")
+        print("2. Открыть таблицу")
+        print("3. Удалить таблицу")
+        print("0. Выход")
 
-    all_records = select_rcd(number_of_base)
-    i = 0
-    for rec in all_records:
-        if rec == old_record:
-            update_rcd(number_of_base, i, new_values)
-            break
-        i += 1
-
-    print("\nДанные успешно изменены")
-
-
-def delete_student(number_of_base, records, n=0) -> None:
-    if delete_rcd(number_of_base, records, n):
-        print("\nСтудент успешно удален")
-    else:
-        print("\nОшибка: не удалось удалить студента")
+    @staticmethod
+    def _print_table_menu() -> None:
+        print("\n=== Таблица ===")
+        print("1. Добавить запись")
+        print("2. Показать все записи")
+        print("3. Найти записи по фильтру")
+        print("4. Сортировать записи")
+        print("0. Назад")
 
 
 def run() -> None:
-    while True:
-        print_menu_for_many_bases()
-        action_base = input("Выберите действие: ").strip()
-
-        if action_base == "1":
-            print("Введите название для базы")
-            name = input().strip()
-            print("Введите имена колонок через запятую (например: id,name,age)")
-            print("Первая колонка будет использоваться как идентификатор")
-            columns_input = input().strip()
-            temp = [col.strip() for col in columns_input.split(",")]
-            if temp:
-                create_bs(name, temp)
-                print(f"База '{name}' создана с колонками: {temp}")
-            else:
-                print("Ошибка: нужно указать хотя бы одну колонку")
-
-        elif action_base == "2":
-            show_all_bases()
-            Bases = return_bs()
-            if len(Bases) > 0:
-                print("Выберите базу для работы (-1 для выход в меню)")
-                number_of_base = 0
-                while True:
-                    try:
-                        number_of_base = int(input())
-                    except ValueError:
-                        number_of_base = "!"
-                    if number_of_base == "!" or number_of_base < -1:
-                        print("Ошибка повторите ввод")
-                    else:
-                        break
-                if number_of_base != -1 and number_of_base < len(Bases):
-                    temp = get_tmp(number_of_base)
-                    while True:
-                        _print_menu()
-                        action = input("Выберите действие: ").strip()
-
-                        if action == "1":
-                            add_student(number_of_base, temp)
-
-                        elif action == "2":
-                            show_all_students(number_of_base)
-
-                        elif action == "3":
-                            result = find_students_by_filter(number_of_base, temp)
-                            _print_submenu()
-                            while True:
-                                subaction = input("Выберите действие: ").strip()
-                                if subaction == "0":
-                                    break
-                                elif subaction == "1" or subaction == "2":
-                                    n = 0
-                                    if len(result) > 1:
-                                        while True:
-                                            try:
-                                                n = int(
-                                                    input(
-                                                        "Выберите номер студента из списка выше: "
-                                                    ).strip()
-                                                )
-                                            except ValueError:
-                                                n = len(result)
-                                            if n >= len(result):
-                                                print(
-                                                    "Такого студента нет в списке.  Повторите ввод"
-                                                )
-                                            else:
-                                                break
-                                    if subaction == "1":
-                                        update_student(number_of_base, result, n, temp)
-                                    else:
-                                        delete_student(number_of_base, result, n)
-                                    result = select_rcd(number_of_base, filters=[])
-                                    break
-                                else:
-                                    print("Неизвестная команда. Повторите ввод.")
-                        elif action == "0":
-                            print("Выход из программы.")
-                            break
-
-                        else:
-                            print("Неизвестная команда. Повторите ввод.")
-            else:
-                print("Нет доступных баз")
-
-        elif action_base == "3":
-            show_all_bases()
-            Bases = return_bs()
-            if len(Bases) > 0:
-                print("Введите номер базы для удаления")
-                while True:
-                    try:
-                        n = int(input())
-                    except ValueError:
-                        n = "!"
-                    if n == "!" or n >= len(Bases):
-                        print("Ошибка повторите ввод")
-                    else:
-                        break
-                delete_bs(n)
-            else:
-                print("Баз для удаления нету")
-        elif action_base == "0":
-            break
-        else:
-            print("Неизвестная команда. Повторите ввод.")
+    DatabaseCLI().run()
