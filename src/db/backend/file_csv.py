@@ -56,4 +56,3 @@ class CsvDatabaseManager(FileDatabaseManager):
                 )
 
         return Table(table_name, columns, records=rows, indexed_fields=indexed_fields)
-#67
