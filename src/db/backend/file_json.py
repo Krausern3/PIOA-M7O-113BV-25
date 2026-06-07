@@ -18,5 +18,10 @@ class JsonDatabaseManager(FileDatabaseManager):
             raise InvalidStorageDataError(f"Файл '{path.name}' содержит некорректный JSON.") from exc
 
     def _write_storage(self, path: Path, data: object) -> None:
-        with path.open("w", encoding="utf-8") as file:
-            json.dump(data, file, ensure_ascii=False, indent=2)
+        try:
+            with path.open("w", encoding="utf-8") as file:
+                json.dump(data, file, ensure_ascii=False, indent=2)
+        except (OSError, TypeError, PermissionError) as exc:
+            raise InvalidStorageDataError(
+                f"Не удалось записать JSON в файл '{path.name}'."
+            ) from exc

@@ -33,7 +33,9 @@ class CsvDatabaseManager(FileDatabaseManager):
             table.columns,
             [self._metadata_marker, *table.indexed_fields],
         ]
-        rows.extend([[str(value) for value in record] for record in table.get_records()])
+        # Сохраняем всё как строки (CSV не хранит типы)
+        rows.extend([[str(value) if value is not None else "" for value in record]
+                     for record in table.get_records()])
         return rows
 
     def _deserialize_table(self, table_name: str, data: object) -> Table:

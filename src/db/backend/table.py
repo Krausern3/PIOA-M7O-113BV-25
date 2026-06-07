@@ -126,17 +126,11 @@ class Table:
         self._index_record(len(self._records) - 1, record)
 
     def _ensure_unique_primary_key(self, primary_key: Any, ignore_index: int | None = None) -> None:
-        if not self._records:
-            return
-
-        indexed_primary = self._indexes.get(self._columns[0], {})
-        if primary_key not in indexed_primary:
-            return
-
-        indexes = indexed_primary[primary_key]
-        if ignore_index is not None and indexes == {ignore_index}:
-            return
-        raise ValueError(f"Запись с id={primary_key} уже существует.")
+        for idx, record in enumerate(self._records):
+            if idx == ignore_index:
+                continue
+            if record[0] == primary_key:
+                raise ValueError(f"Запись с id={primary_key} уже существует.")
 
     def _get_candidate_positions(self, filters: list[Any]) -> list[int] | None:
         candidate_positions: set[int] | None = None
@@ -164,7 +158,19 @@ class Table:
         for index, filter_value in enumerate(filters[: len(self._columns)]):
             if filter_value in (None, ""):
                 continue
-            if record[index] != filter_value:
+
+            record_value = record[index]
+
+            if record_value != filter_value:
+                try:
+                    if isinstance(record_value, str) and isinstance(filter_value, (int, float)):
+                        if float(record_value) == float(filter_value):
+                            continue
+                    elif isinstance(filter_value, str) and isinstance(record_value, (int, float)):
+                        if float(filter_value) == float(record_value):
+                            continue
+                except (ValueError, TypeError):
+                    pass
                 return False
         return True
 
