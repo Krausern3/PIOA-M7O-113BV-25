@@ -67,4 +67,3 @@ class FileDatabaseManager(DatabaseManager, ABC):
 
     @abstractmethod
     def _write_storage(self, path: Path, data: object) -> None:
-        #12
