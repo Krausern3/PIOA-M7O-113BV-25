@@ -14,7 +14,12 @@ class FileDatabaseManager(DatabaseManager, ABC):
     def __init__(self, directory: str) -> None:
         super().__init__()
         self.directory = Path(directory)
-        self.directory.mkdir(parents=True, exist_ok=True)
+        try:
+            self.directory.mkdir(parents=True, exist_ok=True)
+        except OSError as exc:
+            raise InvalidStorageDataError(
+                f"Не удалось создать или открыть директорию хранения '{directory}'."
+            ) from exc
         self._tables = self._load_tables()
 
     def reset(self) -> None:
