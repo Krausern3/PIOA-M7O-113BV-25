@@ -64,8 +64,6 @@ class FileDatabaseManager(DatabaseManager, ABC):
 
     @abstractmethod
     def _read_storage(self, path: Path) -> object:
-        """Read raw table data from a storage file."""
 
     @abstractmethod
     def _write_storage(self, path: Path, data: object) -> None:
-        """Write raw table data to a storage file."""
