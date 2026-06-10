@@ -24,18 +24,24 @@ class CsvDatabaseManager(FileDatabaseManager):
         if not isinstance(data, list):
             raise InvalidStorageDataError("CSV-хранилище ожидает список строк.")
 
-        with path.open("w", encoding="utf-8", newline="") as file:
-            writer = csv.writer(file)
-            writer.writerows(data)
+        try:
+            with path.open("w", encoding="utf-8", newline="") as file:
+                writer = csv.writer(file)
+                writer.writerows(data)
+        except (OSError, TypeError) as exc:
+            raise InvalidStorageDataError(
+                f"Не удалось записать CSV в файл '{path.name}'."
+            ) from exc
 
-    def _serialize_table(self, table: Table) -> object:
+    def _serialize_table(self, table: Table) -> list[list[str]]:
         rows: list[list[str]] = [
             table.columns,
             [self._metadata_marker, *table.indexed_fields],
         ]
-        # Сохраняем всё как строки (CSV не хранит типы)
-        rows.extend([[str(value) if value is not None else "" for value in record]
-                     for record in table.get_records()])
+        rows.extend([
+            [str(value) if value is not None else "" for value in record]
+            for record in table.get_records()
+        ])
         return rows
 
     def _deserialize_table(self, table_name: str, data: object) -> Table:

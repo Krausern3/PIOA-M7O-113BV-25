@@ -9,6 +9,7 @@ from .table import Table
 
 
 class FileDatabaseManager(DatabaseManager, ABC):
+
     file_extension = ""
 
     def __init__(self, directory: str) -> None:
@@ -29,22 +30,27 @@ class FileDatabaseManager(DatabaseManager, ABC):
         tables: list[Table] = []
         for path in sorted(self.directory.glob(f"*{self.file_extension}")):
             table_name = path.stem
-            data = self._read_storage(path)
             try:
+                data = self._read_storage(path)
                 table = self._deserialize_table(table_name, data)
-            except (KeyError, TypeError, ValueError) as exc:
-                raise InvalidStorageDataError(f"Некорректные данные в файле '{path.name}'.") from exc
-            tables.append(table)
+                tables.append(table)
+            except (InvalidStorageDataError, KeyError, TypeError, ValueError) as exc:
+                print(f"Предупреждение: пропущен повреждённый файл {path.name} — {exc}")
+                continue
         return tables
 
     def _save_table(self, table: Table) -> None:
         path = self.directory / f"{table.name}{self.file_extension}"
-        self._write_storage(path, self._serialize_table(table))
+        serialized = self._serialize_table(table)
+        self._write_storage(path, serialized)
 
     def _delete_table_storage(self, table_name: str) -> None:
         path = self.directory / f"{table_name}{self.file_extension}"
         if path.exists():
-            path.unlink()
+            try:
+                path.unlink()
+            except OSError:
+                pass
 
     def _serialize_table(self, table: Table) -> object:
         return {
@@ -57,13 +63,21 @@ class FileDatabaseManager(DatabaseManager, ABC):
         if not isinstance(data, dict):
             raise InvalidStorageDataError("Сохранённая таблица должна быть словарём.")
 
-        columns = data["columns"]
+        columns = data.get("columns", [])
         indexed_fields = data.get("indexed_fields")
         records = data.get("records", [])
-        return Table(table_name, columns, records=records, indexed_fields=indexed_fields)
+
+        return Table(
+            table_name,
+            columns,
+            records=records,
+            indexed_fields=indexed_fields
+        )
 
     @abstractmethod
     def _read_storage(self, path: Path) -> object:
+        pass
 
     @abstractmethod
     def _write_storage(self, path: Path, data: object) -> None:
+        pass

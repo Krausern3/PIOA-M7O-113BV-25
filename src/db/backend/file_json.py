@@ -21,7 +21,7 @@ class JsonDatabaseManager(FileDatabaseManager):
         try:
             with path.open("w", encoding="utf-8") as file:
                 json.dump(data, file, ensure_ascii=False, indent=2)
-        except (OSError, TypeError, PermissionError) as exc:
+        except (OSError, TypeError, PermissionError, json.JSONDecodeError) as exc:
             raise InvalidStorageDataError(
                 f"Не удалось записать JSON в файл '{path.name}'."
             ) from exc
