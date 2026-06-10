@@ -13,12 +13,16 @@ class CsvDatabaseManager(FileDatabaseManager):
     _metadata_marker = "__indexed_fields__"
 
     def _read_storage(self, path: Path) -> object:
-        with path.open("r", encoding="utf-8", newline="") as file:
-            rows = list(csv.reader(file))
-
-        if not rows:
-            raise InvalidStorageDataError(f"Файл '{path.name}' пуст.")
-        return rows
+        try:
+            with path.open("r", encoding="utf-8", newline="") as file:
+                rows = list(csv.reader(file))
+            if not rows:
+                raise InvalidStorageDataError(f"Файл '{path.name}' пуст.")
+            return rows
+        except (OSError, PermissionError) as exc:
+            raise InvalidStorageDataError(
+                f"Не удалось прочитать CSV из файла '{path.name}'."
+            ) from exc
 
     def _write_storage(self, path: Path, data: object) -> None:
         if not isinstance(data, list):

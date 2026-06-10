@@ -16,6 +16,10 @@ class JsonDatabaseManager(FileDatabaseManager):
                 return json.load(file)
         except json.JSONDecodeError as exc:
             raise InvalidStorageDataError(f"Файл '{path.name}' содержит некорректный JSON.") from exc
+        except (OSError, PermissionError) as exc:
+            raise InvalidStorageDataError(
+                f"Не удалось прочитать JSON из файла '{path.name}'."
+            ) from exc
 
     def _write_storage(self, path: Path, data: object) -> None:
         try:

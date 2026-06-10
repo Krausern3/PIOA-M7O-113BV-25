@@ -143,6 +143,9 @@ class Table:
                 continue
 
             matching_positions = self._indexes[column].get(filter_value, set())
+            if not matching_positions and isinstance(filter_value, (int, float)):
+                str_key = str(filter_value)
+                matching_positions = self._indexes[column].get(str_key, set())
             candidate_positions = (
                 set(matching_positions)
                 if candidate_positions is None

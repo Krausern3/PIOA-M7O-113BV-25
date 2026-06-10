@@ -65,7 +65,7 @@ src/
 Из корня проекта:
 
 ```powershell
-.\.venv\Scripts\python.exe -m src.db
+python.exe -m src.db
 ```
 
 При запуске программа предлагает выбрать backend:
@@ -77,11 +77,11 @@ src/
 ## Запуск тестов
 
 ```powershell
-.\.venv\Scripts\python.exe -m pytest -q
+python.exe -m pytest -q
 ```
 
 ## Покрытие
 
 ```powershell
-.\.venv\Scripts\python.exe -m pytest --cov=src --cov-report=term-missing
+python.exe -m pytest --cov=src --cov-report=term-missing
 ```
