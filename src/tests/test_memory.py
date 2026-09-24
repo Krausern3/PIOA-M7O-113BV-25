@@ -1,4 +1,8 @@
+import io
 import unittest
+
+from contextlib import redirect_stdout
+from unittest.mock import patch
 
 from src.db.backend.errors import DuplicateIDError, InvalidAgeError
 from src.db.backend.memory import (
@@ -16,6 +20,9 @@ from src.db.backend.memory import (
     sort_rcd,
     update_rcd,
 )
+from src.db.tyi import DatabaseCLI
+from src.db.tyi import run as tyi_run
+from src.db.__main__ import main
 
 
 class TestStudentTable(unittest.TestCase):

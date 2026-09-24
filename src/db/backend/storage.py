@@ -30,13 +30,9 @@ class FileDatabaseManager(DatabaseManager, ABC):
         tables: list[Table] = []
         for path in sorted(self.directory.glob(f"*{self.file_extension}")):
             table_name = path.stem
-            try:
-                data = self._read_storage(path)
-                table = self._deserialize_table(table_name, data)
-                tables.append(table)
-            except (InvalidStorageDataError, KeyError, TypeError, ValueError) as exc:
-                print(f"Предупреждение: пропущен повреждённый файл {path.name} — {exc}")
-                continue
+            data = self._read_storage(path)
+            table = self._deserialize_table(table_name, data)
+            tables.append(table)
         return tables
 
     def _save_table(self, table: Table) -> None:

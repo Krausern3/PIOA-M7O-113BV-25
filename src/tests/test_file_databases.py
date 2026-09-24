@@ -1,8 +1,10 @@
+import io
 import tempfile
 import unittest
+from contextlib import redirect_stdout
 from pathlib import Path
 
-from src.db.backend.errors import InvalidStorageDataError, TableNotFoundError
+from src.db.backend.errors import TableNotFoundError
 from src.db.backend.file_csv import CsvDatabaseManager
 from src.db.backend.file_json import JsonDatabaseManager
 
@@ -42,13 +44,17 @@ class FileDatabaseContractMixin:
             with self.assertRaises(TableNotFoundError):
                 db.select_records(0)
 
-    def test_invalid_storage_data_raises_error(self) -> None:
+    def test_invalid_storage_data_is_skipped_with_warning(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             invalid_file = Path(directory) / self.invalid_file_name
             invalid_file.write_text(self.invalid_payload(), encoding="utf-8")
 
-            with self.assertRaises(InvalidStorageDataError):
-                self.create_database(directory)
+            buffer = io.StringIO()
+            with redirect_stdout(buffer):
+                db = self.create_database(directory)
+
+            self.assertIn("Предупреждение", buffer.getvalue())
+            self.assertEqual(db.return_bases(), [])
 
     def invalid_payload(self) -> str:
         raise NotImplementedError

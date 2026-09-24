@@ -16,13 +16,14 @@ class CsvDatabaseManager(FileDatabaseManager):
         try:
             with path.open("r", encoding="utf-8", newline="") as file:
                 rows = list(csv.reader(file))
+
             if not rows:
                 raise InvalidStorageDataError(f"Файл '{path.name}' пуст.")
             return rows
-        except (OSError, PermissionError) as exc:
-            raise InvalidStorageDataError(
-                f"Не удалось прочитать CSV из файла '{path.name}'."
-            ) from exc
+        except (OSError, PermissionError, FileNotFoundError) as exc:
+            raise InvalidStorageDataError(f"Не удалось прочитать файл '{path.name}'.") from exc
+        except Exception as exc:
+            raise InvalidStorageDataError(f"Файл '{path.name}' содержит некорректные данные CSV.") from exc
 
     def _write_storage(self, path: Path, data: object) -> None:
         if not isinstance(data, list):
