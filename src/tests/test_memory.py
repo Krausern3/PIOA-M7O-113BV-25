@@ -196,3 +196,118 @@ class TestDatabaseManagerAndModuleAPI(unittest.TestCase):
 
         delete_bs(0)
         self.assertEqual(return_bs(), [])
+
+
+class TestDatabaseCLI(unittest.TestCase):
+    """
+    Тесты консольного интерфейса (src/db/tyi.py).
+
+    DatabaseCLI управляется через input(), поэтому вместо реального
+    ввода подставляем заранее заготовленную очередь ответов
+    (unittest.mock.patch с side_effect). После run() проверяем
+    состояние самой базы данных (cli.database) — так тесты не зависят
+    от точного текста сообщений, которые печатает CLI.
+    """
+
+    @staticmethod
+    def _run_scenario(inputs: list[str]) -> DatabaseCLI:
+        with patch("builtins.input", side_effect=inputs):
+            cli = DatabaseCLI()
+            cli.run()
+        return cli
+
+    def test_choose_database_dispatches_by_user_choice(self) -> None:
+        with patch("src.db.tyi.JsonDatabaseManager") as mock_json, \
+             patch("src.db.tyi.CsvDatabaseManager") as mock_csv:
+            with patch("builtins.input", side_effect=["2"]):
+                DatabaseCLI()
+            mock_json.assert_called_once_with("data/json")
+
+            with patch("builtins.input", side_effect=["3"]):
+                DatabaseCLI()
+            mock_csv.assert_called_once_with("data/csv")
+
+        cli = self._run_scenario(["1", "0"])
+        self.assertIsInstance(cli.database, DatabaseManager)
+
+    def test_create_table_and_add_record(self) -> None:
+        inputs = ["1", "1", "students", "id,name", "", "0"]
+        cli = self._run_scenario(inputs)
+        self.assertEqual(cli.database.get_tmp(0), ["id", "name"])
+
+    def test_duplicate_id_is_rejected(self) -> None:
+        inputs = [
+            "1",
+            "1", "students", "id,name", "",
+            "2", "0",
+            "1", "1", "Иван",   # добавить запись
+            "1", "1", "Мария",  # дубликат id -> не добавится
+            "0", "0",
+        ]
+        cli = self._run_scenario(inputs)
+        self.assertEqual(cli.database.select_records(0), [("1", "Иван")])
+
+    def test_update_and_delete_record(self) -> None:
+        inputs = [
+            "1",
+            "1", "students", "id,name", "",
+            "2", "0",
+            "1", "1", "Иван",
+            "3", "", "", "1", "", "Пётр",  # найти -> обновить имя
+            "3", "", "", "2",              # найти -> удалить
+            "0", "0",
+        ]
+        cli = self._run_scenario(inputs)
+        self.assertEqual(cli.database.select_records(0), [])
+
+    def test_sort_and_index_do_not_crash(self) -> None:
+        inputs = [
+            "1",
+            "1", "students", "id,name", "",
+            "2", "0",
+            "1", "2", "Боб",
+            "1", "1", "Аня",
+            "4", "name", "asc",
+            "5", "",
+            "0", "0",
+        ]
+        cli = self._run_scenario(inputs)
+        self.assertEqual(
+            [record[1] for record in cli.database.select_records(0)],
+            ["Аня", "Боб"],
+        )
+
+    def test_delete_base(self) -> None:
+        inputs = ["1", "1", "students", "id", "", "3", "0", "0"]
+        cli = self._run_scenario(inputs)
+        self.assertEqual(cli.database.return_bases(), [])
+
+    def test_open_base_with_no_tables_and_out_of_range(self) -> None:
+        # проверяем только, что программа не падает
+        self._run_scenario(["1", "2", "0"])
+        self._run_scenario(["1", "1", "students", "id", "", "2", "5", "0"])
+        self._run_scenario(["1", "1", "students", "id", "", "2", "-1", "0"])
+
+    def test_unknown_commands_do_not_crash(self) -> None:
+        self._run_scenario(["1", "9", "0"])
+        inputs = ["1", "1", "students", "id", "", "2", "0", "9", "0", "0"]
+        self._run_scenario(inputs)
+
+    def test_delete_base_without_tables_and_out_of_range(self) -> None:
+        self._run_scenario(["1", "3", "0"])
+        inputs = ["1", "1", "students", "id", "", "3", "5", "0"]
+        self._run_scenario(inputs)
+
+    def test_create_base_with_empty_name_does_not_crash(self) -> None:
+        inputs = ["1", "1", "", "id", "", "0"]
+        cli = self._run_scenario(inputs)
+        self.assertEqual(cli.database.return_bases(), [])
+
+    def test_module_level_run_delegates_to_cli(self) -> None:
+        with patch("builtins.input", side_effect=["1", "0"]):
+            tyi_run()
+
+    def test_main_entrypoint_calls_run(self) -> None:
+        with patch("src.db.__main__.run") as mock_run:
+            main()
+        mock_run.assert_called_once()
